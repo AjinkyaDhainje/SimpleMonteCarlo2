@@ -16,7 +16,8 @@ from monte_carlo.charts import (
     payoff_chart,
     terminal_price_chart,
     price_convergence_chart,
-    variance_mean_convergence_chart
+    variance_mean_convergence_chart,
+    volatility_path_chart,
 )
 
 
@@ -152,12 +153,25 @@ figures = [
     terminal_price_chart(result.terminal_prices),
     payoff_chart(result.discounted_payoffs, result.option_price),
     price_convergence_chart(result.discounted_payoffs, result.option_price),
-    variance_mean_convergence_chart(result.discounted_payoffs)
+    variance_mean_convergence_chart(result.discounted_payoffs),
+]
+tab_names = [
+    "Paths",
+    "Final prices",
+    "Payoffs",
+    "Price convergence",
+    "Variance of Mean",
 ]
 
-for tab, figure in zip(
-    st.tabs(["Paths", "Final prices", "Payoffs", "Price convergence", "Variance of Mean"]), figures
-):
+# Heston produces a second path set for stochastic volatility. Keep this graph
+# out of the UI for every other model.
+if result.display_volatility_paths is not None:
+    figures.append(
+        volatility_path_chart(result.display_volatility_paths, result.time_grid)
+    )
+    tab_names.append("Volatility")
+
+for tab, figure in zip(st.tabs(tab_names), figures):
     with tab:
         st.pyplot(figure, width="stretch")
         plt.close(figure)

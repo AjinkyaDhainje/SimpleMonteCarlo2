@@ -138,3 +138,22 @@ def variance_mean_convergence_chart(discounted_payoffs):
     ax1.legend(lines1 + lines2, labels1 + labels2)
     figure.tight_layout()
     return figure
+
+def volatility_path_chart(display_volatility_paths, time_grid):
+    """Plot a representative subset of Heston volatility paths."""
+    figure, axes = _figure(
+        "Sample simulated volatility paths", "Time (years)", "Volatility"
+    )
+    line_count = min(100, len(display_volatility_paths))
+    indices = np.linspace(
+        0, len(display_volatility_paths) - 1, line_count, dtype=int
+    )
+    axes.plot(
+        time_grid,
+        display_volatility_paths[indices].T,
+        alpha=0.35,
+        linewidth=0.8,
+    )
+    figure.tight_layout()
+    return figure
+

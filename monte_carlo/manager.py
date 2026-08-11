@@ -21,6 +21,8 @@ class SimulationResult:
     standard_error: float
     confidence_interval: tuple[float, float]
     elapsed_seconds: float
+    # Present only for Heston. These are volatility (sqrt variance), not variance.
+    display_volatility_paths: np.ndarray | None = None
 
 
 @dataclass
@@ -79,6 +81,11 @@ class SimulationManager:
         start_time = perf_counter()
         display_count = min(inputs.num_paths, 10_000)
         display_paths = np.empty((display_count, inputs.num_steps + 1))
+        display_volatility_paths = (
+            np.empty((display_count, inputs.num_steps + 1))
+            if inputs.model == "Heston Stochastic Volatility"
+            else None
+        )
         terminal_prices = np.empty(inputs.num_paths)
         discounted_payoffs = np.empty(inputs.num_paths)
 
@@ -98,6 +105,10 @@ class SimulationManager:
             keep = min(count, display_count - displayed)
             if keep > 0:
                 display_paths[displayed : displayed + keep] = paths[:keep]
+                if display_volatility_paths is not None:
+                    display_volatility_paths[displayed : displayed + keep] = (
+                        engine.last_volatility_paths[:keep]
+                    )
                 displayed += keep
 
         option_price = float(np.mean(discounted_payoffs))
@@ -130,6 +141,7 @@ class SimulationManager:
                 option_price + half_width,
             ),
             elapsed_seconds=perf_counter() - start_time,
+            display_volatility_paths=display_volatility_paths,
         )
 
     @staticmethod

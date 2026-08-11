@@ -49,6 +49,13 @@ class SimulationInputs:
     levy_skew: float = -0.10
     levy_variance: float = 0.20
 
+    # Heston stochastic-volatility inputs. ``volatility`` above is used as
+    # the initial volatility, so the initial variance is volatility**2.
+    heston_mean_reversion: float = 2.0
+    heston_long_run_variance: float = 0.04
+    heston_vol_of_vol: float = 0.30
+    heston_correlation: float = -0.70
+
     # Asian-payoff input. Other payoffs ignore this value.
     averaging_days: float = 365.0
 
