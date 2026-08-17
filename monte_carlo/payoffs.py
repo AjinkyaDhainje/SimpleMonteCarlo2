@@ -1,7 +1,5 @@
 # All different payoffs live here, add new ones as a separate class
 
-import math
-
 import numpy as np
 
 
@@ -24,7 +22,6 @@ class VanillaPayoff:
             * (terminal_prices - inputs.strike),
             0.0,
         )
-
 
 class AsianPayoff:
     name = "Asian"
@@ -83,10 +80,9 @@ class LookbackPayoff:
             0.0,
         )
 
-
 # Add a payoff class here to make it available to the manager and UI.
 PAYOFFS = {
     VanillaPayoff.name: VanillaPayoff(),
     AsianPayoff.name: AsianPayoff(),
-    LookbackPayoff.name: LookbackPayoff()
+    LookbackPayoff.name: LookbackPayoff(),
 }

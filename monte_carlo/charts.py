@@ -13,16 +13,30 @@ def _figure(title, x_label, y_label):
     return figure, axes
 
 
-def path_chart(display_paths, time_grid, strike):
+def path_chart(
+    display_paths,
+    time_grid,
+    reference_level=None,
+    reference_label="Strike",
+    reference_lines=None,
+):
+    """Plot paths with either one legacy reference or several labelled levels."""
     figure, axes = _figure(
         "Sample simulated asset paths", "Time (years)", "Asset price"
     )
     line_count = min(100, len(display_paths))
     indices = np.linspace(0, len(display_paths) - 1, line_count, dtype=int)
     axes.plot(time_grid, display_paths[indices].T, alpha=0.35, linewidth=0.8)
-    axes.axhline(
-        strike, color="black", linestyle="--", label=f"Strike = {strike:.2f}"
-    )
+    if reference_lines is None:
+        reference_lines = [(reference_level, reference_label, "black")]
+    for level, label, color in reference_lines:
+        axes.axhline(
+            level,
+            color=color,
+            linestyle="--",
+            linewidth=1.5,
+            label=f"{label} = {level:.2f}",
+        )
     axes.legend()
     figure.tight_layout()
     return figure
@@ -156,4 +170,3 @@ def volatility_path_chart(display_volatility_paths, time_grid):
     )
     figure.tight_layout()
     return figure
-

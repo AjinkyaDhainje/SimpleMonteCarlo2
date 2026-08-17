@@ -5,7 +5,8 @@ from time import perf_counter
 
 import numpy as np
 
-from .engine import MODELS, MonteCarloEngine
+from .autocallable_engine import AutocallableEngine
+from .engine import AUTOCALLABLE_MODELS, MODELS, MonteCarloEngine
 from .payoffs import PAYOFFS
 
 
@@ -38,8 +39,13 @@ class MultiRunSimulationResult:
 class SimulationManager:
     """Validate, simulate, calculate payoffs, and summarize the result."""
 
-    def __init__(self, engine_class=MonteCarloEngine):
+    def __init__(
+        self,
+        engine_class=MonteCarloEngine,
+        autocallable_engine_class=AutocallableEngine,
+    ):
         self.engine_class = engine_class
+        self.autocallable_engine_class = autocallable_engine_class
 
     def run_multiple(self, inputs):
         """Run the same simulation repeatedly and retain only the last paths.
@@ -72,18 +78,31 @@ class SimulationManager:
 
     def run(self, inputs):
         inputs.validate_common_inputs()
+        if (
+            inputs.option_category == "Autocallable"
+            and inputs.model not in AUTOCALLABLE_MODELS
+        ):
+            supported = ", ".join(AUTOCALLABLE_MODELS)
+            raise ValueError(
+                f"Autocallables support only these models: {supported}."
+            )
         model = self._selected(MODELS, inputs.model, "model")
-        payoff = self._selected(PAYOFFS, inputs.payoff, "payoff")
         model.validate(inputs)
-        payoff.validate(inputs)
-        engine = self.engine_class(inputs)
+        if inputs.option_category == "Autocallable":
+            payoff = None
+            engine = self.autocallable_engine_class(inputs)
+            engine.validate_product()
+        else:
+            payoff = self._selected(PAYOFFS, inputs.payoff, "payoff")
+            payoff.validate(inputs)
+            engine = self.engine_class(inputs)
 
         start_time = perf_counter()
         display_count = min(inputs.num_paths, 10_000)
         display_paths = np.empty((display_count, inputs.num_steps + 1))
         display_volatility_paths = (
             np.empty((display_count, inputs.num_steps + 1))
-            if inputs.model == "Heston Stochastic Volatility"
+            if inputs.model == "Heston SV"
             else None
         )
         terminal_prices = np.empty(inputs.num_paths)
@@ -91,13 +110,15 @@ class SimulationManager:
 
         displayed = 0
         discount_factor = np.exp(-inputs.risk_free_rate * inputs.maturity)
-
         batch_size = engine.batch_size()
         for offset in range(0, inputs.num_paths, batch_size):
             count = min(batch_size, inputs.num_paths - offset)
             paths = engine.generate_paths(count)
             count = len(paths)
-            batch_payoffs = payoff.calculate(paths, inputs) * discount_factor
+            if payoff is None:
+                batch_payoffs = engine.calculate_discounted_payoffs(paths)
+            else:
+                batch_payoffs = payoff.calculate(paths, inputs) * discount_factor
 
             terminal_prices[offset : offset + count] = paths[:, -1]
             discounted_payoffs[offset : offset + count] = batch_payoffs

@@ -216,6 +216,50 @@ class GeometricBrownianMotion(DiffusionModel):
         return super().simulate(inputs, normal_draws, discretization, random_generator)
 
 
+class GBMLocalVolatility(DiffusionModel):
+    """Risk-neutral GBM with a power-law local-volatility surface.
+
+    sigma_local(S) = sigma_0 * (S / S_0) ** beta
+
+    ``beta=0`` recovers ordinary GBM. Positive beta increases volatility as
+    spot rises; negative beta produces the equity-style inverse relationship.
+    """
+
+    name = "GBM LV"
+    extra_inputs = [
+        {
+            "name": "local_volatility_exponent",
+            "label": "Local-volatility exponent (beta)",
+            "min_value": -2.0,
+            "max_value": 2.0,
+            "step": 0.05,
+            "format": "%.4f",
+            "help": "0 gives standard GBM; negative values add downside skew.",
+        }
+    ]
+
+    def validate(self, inputs):
+        if not math.isfinite(inputs.local_volatility_exponent):
+            raise ValueError("Local-volatility exponent must be finite.")
+        if not -2.0 <= inputs.local_volatility_exponent <= 2.0:
+            raise ValueError("Local-volatility exponent must be between -2 and 2.")
+
+    def _local_volatility(self, prices, inputs):
+        relative_spot = np.maximum(prices / inputs.start_price, 1.0e-12)
+        return inputs.volatility * relative_spot ** inputs.local_volatility_exponent
+
+    def drift(self, prices, inputs):
+        return inputs.risk_free_rate * prices
+
+    def diffusion(self, prices, inputs):
+        return self._local_volatility(prices, inputs) * prices
+
+    def diffusion_derivative(self, prices, inputs):
+        return (
+            1.0 + inputs.local_volatility_exponent
+        ) * self._local_volatility(prices, inputs)
+
+
 class ArithmeticBrownianMotion(DiffusionModel):
     """Arithmetic model: dS = r*S0*dt + sigma*S0*dW.
 
@@ -456,7 +500,7 @@ class HestonModel:
     full-truncation Euler step.
     """
 
-    name = "Heston Stochastic Volatility"
+    name = "Heston SV"
     extra_inputs = [
         {
             "name": "heston_mean_reversion",
@@ -791,9 +835,16 @@ MODELS = {
     ArithmeticBrownianMotion.name: ArithmeticBrownianMotion(),
     HullWhiteModel.name: HullWhiteModel(),
     TwoFactorHullWhiteModel.name: TwoFactorHullWhiteModel(),
+    GBMLocalVolatility.name: GBMLocalVolatility(),
     HestonModel.name: HestonModel(),
     MertonJumpModel.name: MertonJumpModel(),
     LevyProcess.name: LevyProcess(),
+}
+
+# Autocallables deliberately use a smaller, product-approved model universe.
+# Normal options continue to use the complete model registry above.
+AUTOCALLABLE_MODELS = {
+    name: MODELS[name] for name in (GBMLocalVolatility.name, HestonModel.name)
 }
 
 

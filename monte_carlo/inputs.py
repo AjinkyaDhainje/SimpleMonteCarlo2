@@ -15,6 +15,7 @@ class SimulationInputs:
     """
 
     # Component choices
+    option_category: str = "Normal"
     model: str = "Geometric Brownian Motion"
     discretization: str = "Euler"
     payoff: str = "Vanilla"
@@ -56,14 +57,27 @@ class SimulationInputs:
     heston_vol_of_vol: float = 0.30
     heston_correlation: float = -0.70
 
+    # GBM local-volatility input. The instantaneous volatility is
+    # volatility * (spot / start_price) ** local_volatility_exponent.
+    local_volatility_exponent: float = 0.0
+
     # Asian-payoff input. Other payoffs ignore this value.
     averaging_days: float = 365.0
+
+    # Autocallable product inputs. Barrier levels are ratios of start_price and
+    # the coupon rate is paid per observation (not annualised).
+    autocall_notional: float = 1_000.0
+    autocall_coupon_rate: float = 0.02
+    autocall_observation_frequency_months: float = 3.0
+    autocall_barrier: float = 1.0
+    autocall_coupon_barrier: float = 0.70
+    autocall_protection_barrier: float = 0.60
+    autocall_memory_coupon: bool = True
 
     def validate_common_inputs(self) -> None:
         """Validate only the values required by every simulation."""
         numbers = {
             "start_price": self.start_price,
-            "strike": self.strike,
             "maturity": self.maturity,
             "risk_free_rate": self.risk_free_rate,
             "volatility": self.volatility,
@@ -74,7 +88,15 @@ class SimulationInputs:
 
         if self.start_price <= 0:
             raise ValueError("Start price must be greater than zero.")
-        if self.strike <= 0:
+        if self.option_category not in ("Normal", "Autocallable"):
+            raise ValueError("Option category must be Normal or Autocallable.")
+        if self.option_category == "Autocallable" and self.payoff != "Autocallable":
+            raise ValueError("Autocallable category requires the Autocallable payoff.")
+        if self.option_category == "Normal" and self.payoff == "Autocallable":
+            raise ValueError("Normal category cannot use the Autocallable payoff.")
+        if self.option_category == "Normal" and not math.isfinite(self.strike):
+            raise ValueError("strike must be a finite number.")
+        if self.option_category == "Normal" and self.strike <= 0:
             raise ValueError("Strike must be greater than zero.")
         if self.maturity <= 0:
             raise ValueError("Maturity must be greater than zero.")
@@ -92,5 +114,8 @@ class SimulationInputs:
             raise ValueError("Number of runs must be a whole number.")
         if self.runs < 1:
             raise ValueError("Number of runs must be at least one.")
-        if self.option_type not in ("Call", "Put"):
+        if (
+            self.option_category == "Normal"
+            and self.option_type not in ("Call", "Put")
+        ):
             raise ValueError("Option type must be Call or Put.")

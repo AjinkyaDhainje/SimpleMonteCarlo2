@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import streamlit as st
 
 from monte_carlo import (
+    AutocallableEngine,
+    AUTOCALLABLE_MODELS,
     DISCRETIZATIONS,
     MODELS,
     PAYOFFS,
@@ -21,11 +23,21 @@ from monte_carlo.charts import (
 )
 
 
-def extra_number_inputs(component, defaults, maturity):
+def extra_inputs(component, defaults, maturity):
     """Display inputs declared by the selected model or payoff."""
     values = {}
     for field in component.extra_inputs:
-        default_value = float(getattr(defaults, field["name"]))
+        default_value = getattr(defaults, field["name"])
+        if field.get("widget") == "checkbox":
+            values[field["name"]] = st.checkbox(
+                field["label"],
+                value=bool(default_value),
+                key=f"extra_{field['name']}",
+                help=field.get("help"),
+            )
+            continue
+
+        default_value = float(default_value)
         options = {
             "label": field["label"],
             "value": default_value,
@@ -52,9 +64,17 @@ defaults = SimulationInputs()
 with st.sidebar:
     st.header("Simulation inputs")
 
+    option_category = st.selectbox(
+        "Option Category", ["Normal", "Autocallable"]
+    )
+
     st.subheader("Market and option")
     start_price = st.number_input("Start price", min_value=0.01, value=100.0)
-    strike = st.number_input("Strike", min_value=0.01, value=100.0)
+    strike = (
+        st.number_input("Strike", min_value=0.01, value=100.0)
+        if option_category == "Normal"
+        else start_price
+    )
     maturity = st.number_input(
         "Maturity (years)", min_value=0.01, value=1.0, step=0.25
     )
@@ -66,17 +86,26 @@ with st.sidebar:
     )
 
     st.subheader("Components")
-    model_name = st.selectbox("Model", list(MODELS))
+    available_models = (
+        MODELS if option_category == "Normal" else AUTOCALLABLE_MODELS
+    )
+    model_name = st.selectbox("Model", list(available_models))
     # Streamlit reruns on selection, so these fields immediately appear below
     # the model that requires them.
-    model_values = extra_number_inputs(MODELS[model_name], defaults, maturity)
+    model_values = extra_inputs(available_models[model_name], defaults, maturity)
 
     discretization = st.selectbox("Discretization", list(DISCRETIZATIONS))
 
-    payoff_name = st.selectbox("Payoff", list(PAYOFFS))
-    payoff_values = extra_number_inputs(PAYOFFS[payoff_name], defaults, maturity)
+    if option_category == "Normal":
+        payoff_name = st.selectbox("Payoff", list(PAYOFFS))
+        payoff_values = extra_inputs(PAYOFFS[payoff_name], defaults, maturity)
+        option_type = st.selectbox("Option type", ["Call", "Put"])
+    else:
+        payoff_name = "Autocallable"
+        option_type = "Call"
+        st.subheader("Autocallable product")
+        payoff_values = extra_inputs(AutocallableEngine, defaults, maturity)
 
-    option_type = st.selectbox("Option type", ["Call", "Put"])
     sampling = st.selectbox("Sampling type", list(SAMPLERS))
 
     st.subheader("Numerical inputs")
@@ -101,6 +130,7 @@ if not run_button:
 
 try:
     inputs = SimulationInputs(
+        option_category=option_category,
         model=model_name,
         discretization=discretization,
         payoff=payoff_name,
@@ -149,7 +179,32 @@ columns[3].metric(
 # path matrix: result.display_paths contains at most 10,000 complete paths.
 st.subheader("Final run charts")
 figures = [
-    path_chart(result.display_paths, result.time_grid, inputs.strike),
+    path_chart(
+        result.display_paths,
+        result.time_grid,
+        inputs.strike if inputs.option_category == "Normal" else None,
+        reference_lines=(
+            None
+            if inputs.option_category == "Normal"
+            else [
+                (
+                    inputs.start_price * inputs.autocall_barrier,
+                    "Autocall barrier",
+                    "#C0392B",
+                ),
+                (
+                    inputs.start_price * inputs.autocall_coupon_barrier,
+                    "Coupon barrier",
+                    "#D68910",
+                ),
+                (
+                    inputs.start_price * inputs.autocall_protection_barrier,
+                    "Protection barrier",
+                    "#7D3C98",
+                ),
+            ]
+        ),
+    ),
     terminal_price_chart(result.terminal_prices),
     payoff_chart(result.discounted_payoffs, result.option_price),
     price_convergence_chart(result.discounted_payoffs, result.option_price),
